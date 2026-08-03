@@ -1,0 +1,1370 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>资源位走查 AI 自动化实践</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --bg2: #1e293b;
+    --bg3: #0d1424;
+    --card: rgba(30, 41, 59, 0.85);
+    --border: rgba(99, 102, 241, 0.2);
+    --border2: rgba(99, 102, 241, 0.1);
+    --p1: #6366f1;
+    --p2: #06b6d4;
+    --p3: #818cf8;
+    --p4: #a78bfa;
+    --green: #10b981;
+    --red: #ef4444;
+    --orange: #f59e0b;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --muted2: #94a3b8;
+    --grad: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #06b6d4 100%);
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  #particles {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  .orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    pointer-events: none;
+  }
+  .orb-1 { width: 600px; height: 600px; top: -200px; left: -200px; background: radial-gradient(circle, #6366f1, transparent); opacity: 0.12; animation: orb-move-1 20s ease-in-out infinite; }
+  .orb-2 { width: 500px; height: 500px; top: 30%; right: -150px; background: radial-gradient(circle, #06b6d4, transparent); opacity: 0.1; animation: orb-move-2 25s ease-in-out infinite; animation-delay: -8s; }
+  .orb-3 { width: 400px; height: 400px; bottom: 10%; left: 20%; background: radial-gradient(circle, #8b5cf6, transparent); opacity: 0.09; animation: orb-move-3 18s ease-in-out infinite; animation-delay: -5s; }
+  .orb-4 { width: 300px; height: 300px; top: 60%; left: 60%; background: radial-gradient(circle, #f472b6, transparent); opacity: 0.06; animation: orb-move-1 22s ease-in-out infinite; animation-delay: -12s; }
+
+  .bg-shell { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+  .grid-bg {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image:
+      linear-gradient(rgba(99, 102, 241, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(99, 102, 241, 0.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+  }
+
+  .divider {
+    height: 1px;
+    position: relative;
+    z-index: 1;
+    background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.3), rgba(6, 182, 212, 0.2), transparent);
+  }
+
+  .grad-text {
+    background: var(--grad);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+
+  /* ---------- Navbar ---------- */
+  nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 1000;
+    height: 60px;
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    background: rgba(15, 23, 42, 0.7);
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    transition: background 0.3s;
+  }
+  nav.scrolled { background: rgba(15, 23, 42, 0.92); }
+  .nav-inner {
+    max-width: 1280px;
+    width: 100%;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); flex-shrink: 0; }
+  .brand-icon {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    background: var(--grad);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+  }
+  .brand-name { font-size: 0.95rem; font-weight: 700; white-space: nowrap; }
+  .nav-links { display: flex; gap: 28px; align-items: center; }
+  .nav-links a {
+    color: var(--muted2);
+    font-size: 0.85rem;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: color 0.2s;
+  }
+  .nav-links a:hover { color: var(--text); }
+  .status-pill {
+    display: flex; align-items: center; gap: 6px;
+    background: rgba(99, 102, 241, 0.12);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-size: 0.75rem;
+    color: var(--p3);
+    white-space: nowrap;
+  }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: blink 2s infinite; }
+
+  /* ---------- Hero ---------- */
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 100px 24px 80px;
+    position: relative;
+    z-index: 1;
+  }
+  .hero-eyebrow {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: rgba(99, 102, 241, 0.12);
+    border: 1px solid rgba(99, 102, 241, 0.35);
+    border-radius: 999px;
+    padding: 7px 20px;
+    font-size: 0.8rem;
+    color: var(--p3);
+    margin-bottom: 32px;
+    animation: counter-up 0.8s ease both;
+  }
+  .hero-dot-wrap { position: relative; display: inline-block; }
+  .hero-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); display: inline-block; }
+  .hero-dot-ring {
+    position: absolute; inset: -3px; border-radius: 50%;
+    background: var(--green); opacity: 0.3;
+    animation: pulse-ring 1.5s ease-out infinite;
+  }
+  .hero h1 { font-size: clamp(2.5rem, 6vw, 4.5rem); font-weight: 800; line-height: 1.1; margin: 0 0 24px; }
+  .hero-sub { font-size: clamp(1rem, 1.8vw, 1.15rem); color: var(--muted2); max-width: 620px; margin: 0 auto 52px; line-height: 1.7; }
+  .hero-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+    width: 100%;
+    max-width: 880px;
+  }
+  .stat-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px 20px;
+    text-align: center;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.3s, box-shadow 0.3s;
+    cursor: default;
+  }
+  .stat-card:hover { transform: translateY(-6px); box-shadow: 0 8px 32px rgba(99, 102, 241, 0.25); }
+  .stat-topbar { position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--grad); }
+  .stat-glow {
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at top center, rgba(99, 102, 241, 0.08) 0%, transparent 60%);
+    pointer-events: none;
+  }
+  .stat-icon { font-size: 1.4rem; display: block; margin-bottom: 10px; }
+  .stat-num { font-size: clamp(1.8rem, 3.5vw, 2.6rem); font-weight: 800; line-height: 1; margin-bottom: 8px; }
+  .stat-label { font-size: 0.82rem; color: var(--muted2); }
+  .scroll-down {
+    margin-top: 60px;
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    color: var(--muted); font-size: 0.78rem;
+  }
+  .scroll-arrow {
+    width: 22px; height: 22px;
+    border-right: 2px solid var(--muted);
+    border-bottom: 2px solid var(--muted);
+    transform: rotate(45deg);
+    animation: floatY 1.5s ease-in-out infinite;
+  }
+
+  /* ---------- Shared sections ---------- */
+  section { padding: 100px 0; position: relative; z-index: 1; }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 0 24px; }
+  .wrap-narrow { max-width: 960px; }
+  .section-header { text-align: center; margin-bottom: 60px; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(99, 102, 241, 0.1);
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    border-radius: 999px;
+    padding: 5px 16px;
+    font-size: 0.75rem;
+    color: var(--p3);
+    letter-spacing: 0.08em;
+    margin-bottom: 16px;
+  }
+  .section-header h2 { font-size: clamp(1.8rem, 3.5vw, 2.6rem); font-weight: 800; line-height: 1.15; margin: 0 0 14px; }
+  .section-desc { font-size: 1rem; color: var(--muted2); max-width: 560px; margin: 0 auto; }
+
+  [data-reveal] {
+    opacity: 0;
+    transform: translateY(28px);
+    transition: opacity 0.7s ease, transform 0.7s ease;
+  }
+  [data-reveal].is-visible { opacity: 1; transform: none; }
+
+  /* ---------- Pain ---------- */
+  .pain-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .pain-card {
+    background: var(--card);
+    border: 1px solid var(--border2);
+    border-radius: 16px;
+    padding: 28px 24px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    position: relative;
+    overflow: hidden;
+    transform: translateY(0);
+    box-shadow: none;
+    transition: transform 0.3s, box-shadow 0.3s, border-color 0.3s;
+  }
+  .pain-card:hover { transform: translateY(-4px); box-shadow: 0 8px 32px rgba(99, 102, 241, 0.2); border-color: rgba(99, 102, 241, 0.4); }
+  .pain-bar {
+    position: absolute; top: 0; left: 0; width: 3px; height: 100%;
+    background: var(--grad);
+    transform: scaleY(0); transform-origin: bottom;
+    transition: transform 0.3s;
+  }
+  .pain-card:hover .pain-bar { transform: scaleY(1); }
+  .pain-num {
+    position: absolute; top: 16px; right: 16px;
+    font-size: 3rem; font-weight: 900;
+    opacity: 0.08; line-height: 1;
+  }
+  .pain-icon {
+    width: 52px; height: 52px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(6, 182, 212, 0.1));
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem;
+    margin-bottom: 18px;
+  }
+  .pain-card h3 { font-size: 1rem; font-weight: 700; margin: 0 0 10px; }
+  .pain-card p { font-size: 0.85rem; color: var(--muted2); line-height: 1.7; margin: 0; }
+
+  /* ---------- Types ---------- */
+  .types-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+  .shot-card {
+    background: var(--card);
+    border: 1px solid var(--border2);
+    border-radius: 16px;
+    overflow: hidden;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    transform: translateY(0);
+    box-shadow: none;
+    transition: transform 0.3s, box-shadow 0.3s, border-color 0.3s;
+  }
+  .shot-card:hover { transform: translateY(-8px); box-shadow: 0 20px 50px rgba(99, 102, 241, 0.25); border-color: rgba(99, 102, 241, 0.5); }
+  .phone {
+    width: 88%;
+    margin: 14px auto 18px;
+    border-radius: 34px;
+    overflow: hidden;
+    box-shadow: 0 0 0 3px #2a2a2e, 0 8px 30px rgba(0, 0, 0, 0.5);
+    position: relative;
+    transition: transform 0.3s, box-shadow 0.3s;
+  }
+  .shot-card:hover .phone { transform: scale(1.03); }
+  .shot-placeholder {
+    aspect-ratio: auto;
+    display: block;
+    padding: 0;
+    background: #0a1324;
+    border: 0;
+    border-radius: 0;
+    margin: 0;
+    overflow: hidden;
+    text-align: center;
+  }
+  .shot-placeholder img { display:block; width:100%; height:auto; object-fit:contain; }
+  .shot-placeholder .ph-icon {
+    width: 64px; height: 64px;
+    border-radius: 18px;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(6, 182, 212, 0.15));
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.9rem;
+    color: var(--p3);
+    box-shadow: 0 8px 24px rgba(99, 102, 241, 0.2);
+  }
+  .shot-placeholder .ph-name { font-size: 0.78rem; font-weight: 600; color: var(--text); }
+  .shot-placeholder .ph-tip { font-size: 0.7rem; color: var(--muted); letter-spacing: 0.04em; }
+  .shot-hover {
+    position: absolute; inset: 0;
+    background: rgba(10, 14, 26, 0.55);
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0;
+    transition: opacity 0.3s;
+    border-radius: inherit;
+  }
+  .shot-card:hover .shot-hover { opacity: 1; }
+  .zoom-badge {
+    width: 48px; height: 48px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.2rem;
+    transform: scale(0.7);
+    transition: transform 0.3s;
+  }
+  .shot-card:hover .zoom-badge { transform: scale(1); }
+  .shot-info { padding: 14px 16px 18px; flex: 1; display: flex; flex-direction: column; gap: 6px; }
+  .shot-name { font-size: 0.9rem; font-weight: 700; }
+  .shot-desc {
+    font-size: 0.78rem; color: var(--muted2); line-height: 1.55;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .tag-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+  .tag {
+    font-size: 0.68rem;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(99, 102, 241, 0.1);
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    color: var(--p3);
+    white-space: nowrap;
+  }
+  .tag.lg { font-size: 0.75rem; padding: 3px 10px; }
+
+  /* ---------- Lightbox ---------- */
+  .lightbox {
+    position: fixed; inset: 0; z-index: 9000;
+    background: rgba(0, 0, 0, 0.88);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  .lightbox[hidden] { display: none; }
+  .lb-body {
+    position: relative;
+    display: flex; align-items: center; gap: 24px;
+    max-width: 90vw;
+  }
+  .lb-phone { width: min(300px, 72vw); flex-shrink: 0; }
+  .lb-phone .phone { width: 100%; margin: 0; box-shadow: 0 0 0 3px #2a2a2e, 0 24px 80px rgba(0, 0, 0, 0.75); }
+  .lb-phone .shot-placeholder { aspect-ratio: 9 / 16; margin: 8px; padding: 56px 20px 40px; }
+  .lb-phone .shot-placeholder .ph-icon { width: 72px; height: 72px; border-radius: 20px; font-size: 2.2rem; }
+  .lb-info {
+    width: 280px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  .lb-type { font-size: 0.72rem; color: var(--p2); letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; margin-bottom: 8px; }
+  .lb-name { font-size: 1.3rem; font-weight: 800; margin-bottom: 12px; }
+  .lb-desc { font-size: 0.875rem; color: var(--muted2); line-height: 1.7; margin-bottom: 16px; }
+  .lb-close {
+    position: absolute; top: -16px; right: -16px;
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: rgba(30, 41, 59, 0.9);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 1.1rem;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 0.2s;
+  }
+  .lb-close:hover { transform: rotate(90deg); }
+  .lb-nav {
+    position: absolute; top: 50%;
+    transform: translateY(-50%);
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    background: rgba(30, 41, 59, 0.9);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 1.4rem;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .lb-prev { left: -60px; }
+  .lb-next { right: -60px; }
+  .lb-count {
+    position: absolute; bottom: -40px; left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.8rem; color: var(--muted2);
+    background: rgba(17, 25, 45, 0.8);
+    padding: 4px 14px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+
+  /* ---------- Compare ---------- */
+  .table-shell {
+    overflow-x: auto;
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  table { width: 100%; border-collapse: collapse; min-width: 640px; }
+  thead tr { background: linear-gradient(90deg, rgba(99, 102, 241, 0.15), rgba(6, 182, 212, 0.1)); }
+  th {
+    padding: 16px 20px;
+    font-size: 0.85rem; font-weight: 700;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  th:first-child { color: var(--muted2); }
+  .cmp-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+  }
+  .cmp-badge.before { background: rgba(248, 113, 113, 0.12); color: #f87171; border: 1px solid rgba(248, 113, 113, 0.2); }
+  .cmp-badge.after { background: rgba(52, 211, 153, 0.12); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.2); }
+  td {
+    padding: 14px 20px;
+    font-size: 0.875rem;
+    border-bottom: 1px solid rgba(99, 102, 241, 0.06);
+    vertical-align: middle;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr { transition: background 0.15s; }
+  tbody tr:hover { background: rgba(99, 102, 241, 0.04); }
+  td.dim { font-size: 0.82rem; color: var(--muted2); }
+  td.before { color: #f87171; }
+  td.after { color: #34d399; }
+
+  /* ---------- Schedule ---------- */
+  .schedule-band { background: linear-gradient(180deg, transparent, rgba(99, 102, 241, 0.03), transparent); }
+  .schedule-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  .sched-card {
+    background: var(--card);
+    border: 1px solid var(--border2);
+    border-radius: 16px;
+    padding: 32px 24px;
+    text-align: center;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.3s, box-shadow 0.3s, border-color 0.3s;
+  }
+  .sched-card:hover { transform: translateY(-6px); box-shadow: 0 8px 32px rgba(99, 102, 241, 0.2); border-color: rgba(99, 102, 241, 0.4); }
+  .sched-bottom { position: absolute; bottom: 0; left: 0; right: 0; height: 2px; }
+  .sched-time { font-size: clamp(1.8rem, 4vw, 2.8rem); font-weight: 800; margin-bottom: 10px; }
+  .sched-label { font-size: 0.95rem; font-weight: 700; margin-bottom: 8px; }
+  .sched-desc { font-size: 0.82rem; color: var(--muted2); line-height: 1.65; text-align: left; margin: 0; }
+
+  /* ---------- Flow timeline ---------- */
+  .flow-wrap { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+  .timeline { position: relative; }
+  .timeline-line {
+    position: absolute; left: 52px; top: 20px; bottom: 20px; width: 2px;
+    background: linear-gradient(180deg, rgba(99, 102, 241, 0.6) 0%, rgba(6, 182, 212, 0.6) 50%, rgba(99, 102, 241, 0.6) 100%);
+    border-radius: 1px;
+  }
+  .tstep { display: flex; align-items: flex-start; gap: 20px; margin-bottom: 16px; }
+  .tstep:last-child { margin-bottom: 0; }
+  .tstep-left { flex-shrink: 0; width: 120px; display: flex; flex-direction: column; align-items: center; padding-top: 4px; }
+  .tstep-dot {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: rgba(17, 25, 45, 0.9);
+    border: 2px solid var(--p3);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.72rem; font-weight: 800;
+    color: var(--p3);
+    position: relative; z-index: 1;
+    transition: all 0.3s;
+  }
+  .tstep:hover .tstep-dot {
+    background: radial-gradient(circle, var(--dot-color, #818cf8) 0%, rgba(99, 102, 241, 0.4) 100%);
+    color: #fff;
+    box-shadow: 0 0 16px color-mix(in srgb, var(--dot-color, #818cf8) 60%, transparent);
+  }
+  .tstep-time {
+    margin-top: 5px;
+    font-size: 0.66rem; font-weight: 700;
+    color: var(--dot-color, #818cf8);
+    letter-spacing: 0.02em;
+    text-align: center;
+    background: color-mix(in srgb, var(--dot-color, #818cf8) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--dot-color, #818cf8) 25%, transparent);
+    border-radius: 6px;
+    padding: 2px 6px;
+    white-space: nowrap;
+  }
+  .tstep-card {
+    flex: 1;
+    background: var(--card);
+    border: 1px solid var(--border2);
+    border-radius: 12px;
+    padding: 16px 24px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s;
+  }
+  .tstep:hover .tstep-card {
+    background: rgba(17, 25, 45, 0.95);
+    border-color: color-mix(in srgb, var(--dot-color, #818cf8) 38%, transparent);
+    box-shadow: 0 4px 24px color-mix(in srgb, var(--dot-color, #818cf8) 15%, transparent);
+  }
+  .tstep-bar {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: var(--dot-color, #818cf8);
+    border-radius: 12px 0 0 12px;
+    opacity: 0.4;
+    transition: opacity 0.3s;
+  }
+  .tstep:hover .tstep-bar { opacity: 1; }
+  .tstep-title { font-size: 0.88rem; font-weight: 700; margin-bottom: 4px; padding-left: 6px; }
+  .tstep-desc {
+    font-size: 0.78rem; color: var(--muted2); line-height: 1.6;
+    padding-left: 6px;
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+
+  /* ---------- Arch ---------- */
+  .arch-band { background: linear-gradient(180deg, transparent, rgba(6, 182, 212, 0.03), transparent); }
+  .arch-list { display: flex; flex-direction: column; gap: 16px; max-width: 960px; margin: 0 auto; }
+  .arch-layer {
+    display: flex; align-items: stretch;
+    background: var(--card);
+    border: 1px solid var(--border2);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: all 0.3s;
+  }
+  .arch-layer:hover { border-color: rgba(99, 102, 241, 0.4); box-shadow: 0 8px 32px rgba(99, 102, 241, 0.2); }
+  .arch-side {
+    flex-shrink: 0;
+    width: 110px;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(6, 182, 212, 0.08));
+    border-right: 1px solid var(--border2);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 20px 12px; gap: 6px; text-align: center;
+  }
+  .arch-num { font-size: 1.8rem; font-weight: 800; line-height: 1; }
+  .arch-layer-name { font-size: 0.7rem; color: var(--p2); letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; }
+  .arch-main { flex: 1; padding: 20px 24px; }
+  .arch-main h3 { font-size: 1rem; font-weight: 700; margin: 0 0 8px; }
+  .arch-main p { font-size: 0.83rem; color: var(--muted2); margin: 0 0 12px; line-height: 1.6; }
+
+  /* ---------- Demo ---------- */
+  .demo-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  .demo-phone-panel {
+    display: flex; justify-content: center; align-items: flex-start;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px 24px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  .phone-demo {
+    width: 280px;
+    max-width: 100%;
+    background: #0d1424;
+    border-radius: 36px;
+    border: 2px solid rgba(99, 102, 241, 0.4);
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  }
+  .phone-status {
+    height: 44px;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 16px;
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.5);
+  }
+  .phone-notch { width: 80px; height: 22px; background: #000; border-radius: 0 0 14px 14px; margin: 0 auto; }
+  .phone-chat-head {
+    background: rgba(99, 102, 241, 0.1);
+    padding: 10px 14px;
+    display: flex; align-items: center; gap: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .chat-avatar {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--grad);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; flex-shrink: 0;
+  }
+  .chat-title { font-size: 0.78rem; font-weight: 700; }
+  .chat-sub { font-size: 0.65rem; color: rgba(255, 255, 255, 0.4); }
+  .chat-body { padding: 10px 10px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .msg {
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 0.68rem;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    color: var(--text);
+    word-break: break-word;
+  }
+  .msg.ok { background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); }
+  .msg.warn { background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); }
+  .msg-time { font-size: 0.6rem; color: rgba(255, 255, 255, 0.3); margin-top: 4px; display: block; }
+  .at { color: var(--p2); font-weight: 700; }
+  .demo-side { display: flex; flex-direction: column; gap: 16px; }
+  .info-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 22px 24px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  .info-card h3 { font-size: 0.95rem; font-weight: 700; margin: 0 0 6px; }
+  .info-card .lead { font-size: 0.83rem; color: var(--muted2); margin: 0 0 14px; }
+  .node-list { display: flex; flex-direction: column; gap: 10px; }
+  .node-item {
+    display: flex; align-items: center; gap: 14px;
+    background: rgba(99, 102, 241, 0.06);
+    border-radius: 10px;
+    padding: 10px 14px;
+    border: 1px solid var(--border2);
+  }
+  .node-time { font-size: 1.1rem; font-weight: 800; min-width: 56px; }
+  .node-label { font-size: 0.82rem; font-weight: 600; }
+  .node-desc { font-size: 0.75rem; color: var(--muted2); margin-top: 2px; }
+  .points { padding-left: 18px; display: flex; flex-direction: column; gap: 10px; margin: 0; }
+  .points li { font-size: 0.84rem; color: var(--muted2); line-height: 1.6; }
+
+  /* ---------- Result ---------- */
+  .result-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+  .result-card {
+    background: var(--card);
+    border: 1px solid var(--border2);
+    border-radius: 20px;
+    padding: 36px 24px 32px;
+    text-align: center;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+    transition: transform 0.3s, box-shadow 0.3s, border-color 0.3s;
+  }
+  .result-card:hover { transform: translateY(-8px); box-shadow: 0 12px 40px rgba(99, 102, 241, 0.22); border-color: rgba(99, 102, 241, 0.45); }
+  .result-top { position: absolute; top: 0; left: 0; right: 0; height: 3px; border-radius: 20px 20px 0 0; }
+  .result-glow {
+    position: absolute; top: -30px; left: 50%;
+    transform: translateX(-50%);
+    width: 120px; height: 120px;
+    border-radius: 50%;
+    opacity: 0.06;
+    filter: blur(30px);
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  .result-card:hover .result-glow { opacity: 0.12; }
+  .result-icon { font-size: 2.2rem; margin-bottom: 14px; line-height: 1; }
+  .result-num { font-size: clamp(2.4rem, 5vw, 3.4rem); font-weight: 900; line-height: 1; margin-bottom: 10px; }
+  .result-label { font-size: 0.95rem; font-weight: 700; margin-bottom: 8px; }
+  .result-desc { font-size: 0.78rem; color: var(--muted2); line-height: 1.6; }
+
+  /* ---------- Footer ---------- */
+  footer {
+    border-top: 1px solid var(--border2);
+    text-align: center;
+    padding: 40px 24px;
+    color: var(--muted);
+    font-size: 0.82rem;
+    position: relative;
+    z-index: 1;
+  }
+  .footer-title { font-weight: 600; font-size: 0.9rem; margin: 0 0 8px; }
+  footer p { color: var(--muted); font-size: 0.78rem; margin: 0; }
+
+  /* ---------- Keyframes ---------- */
+  @keyframes floatY {
+    0%, 100% { transform: rotate(45deg) translateY(0); }
+    50% { transform: rotate(45deg) translateY(8px); }
+  }
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+  @keyframes pulse-ring {
+    0% { transform: scale(1); opacity: 0.3; }
+    100% { transform: scale(1.8); opacity: 0; }
+  }
+  @keyframes counter-up {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes orb-move-1 {
+    0%, 100% { transform: translate(0, 0); }
+    50% { transform: translate(60px, 40px); }
+  }
+  @keyframes orb-move-2 {
+    0%, 100% { transform: translate(0, 0); }
+    50% { transform: translate(-70px, 30px); }
+  }
+  @keyframes orb-move-3 {
+    0%, 100% { transform: translate(0, 0); }
+    50% { transform: translate(30px, -50px); }
+  }
+
+  /* ---------- Responsive ---------- */
+  @media (max-width: 1024px) {
+    .hero-stats { grid-template-columns: repeat(2, 1fr); }
+    .types-grid { grid-template-columns: repeat(2, 1fr); }
+    .pain-grid { grid-template-columns: repeat(2, 1fr); }
+    .result-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 760px) {
+    .nav-links { display: none; }
+    section { padding: 72px 0; }
+    .pain-grid { grid-template-columns: 1fr; }
+    .types-grid { grid-template-columns: 1fr; }
+    .schedule-grid { grid-template-columns: 1fr; }
+    .demo-grid { grid-template-columns: 1fr; }
+    .tstep { gap: 12px; }
+    .tstep-left { width: 76px; }
+    .timeline-line { left: 38px; }
+    .lb-body { flex-direction: column; gap: 20px; text-align: center; }
+    .lb-info { width: 100%; max-width: 300px; }
+    .lb-nav { position: fixed; top: auto; bottom: 24px; }
+    .lb-prev { left: 24px; }
+    .lb-next { right: 24px; }
+    .lb-close { top: 16px; right: 16px; }
+    .lb-count { bottom: auto; top: 20px; }
+    .arch-layer { flex-direction: column; }
+    .arch-side { width: 100%; flex-direction: row; border-right: none; border-bottom: 1px solid var(--border2); justify-content: flex-start; gap: 10px; }
+  }
+  @media (max-width: 560px) {
+    .hero-stats { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .stat-card { padding: 22px 14px; }
+    .result-grid { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+    html { scroll-behavior: auto; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="particles" aria-hidden="true"></canvas>
+<div class="bg-shell" aria-hidden="true">
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+  <div class="orb orb-4"></div>
+</div>
+<div class="grid-bg" aria-hidden="true"></div>
+
+<nav id="navbar">
+  <div class="nav-inner">
+    <a class="brand" href="#home" data-smooth>
+      <span class="brand-icon">🤖</span>
+      <span class="brand-name grad-text">资源位走查 · AI 实践</span>
+    </a>
+    <div class="nav-links">
+      <a href="#types" data-smooth>资源位</a>
+      <a href="#compare" data-smooth>对比</a>
+      <a href="#flow" data-smooth>流程</a>
+      <a href="#arch" data-smooth>架构</a>
+      <a href="#demo" data-smooth>消息</a>
+      <a href="#result" data-smooth>成果</a>
+    </div>
+    <div class="status-pill"><span class="status-dot"></span>某生鲜业务</div>
+  </div>
+</nav>
+
+<main>
+  <!-- Hero -->
+  <section id="home" class="hero">
+    <div class="hero-eyebrow">
+      <span class="hero-dot-wrap">
+        <span class="hero-dot"></span>
+        <span class="hero-dot-ring"></span>
+      </span>
+      AI 驱动 · 全自动 · 全天候
+    </div>
+    <h1>
+      <span style="display:block;color:var(--text)">资源位走查</span>
+      <span class="grad-text" style="display:block;margin-top:6px">AI 自动化实践</span>
+    </h1>
+    <p class="hero-sub">
+      通过 AI 大模型 + 自动化脚本，将繁琐的线上资源位走查任务从<br>
+      人工逐一核查升级为全流程自动化，彻底解放运营双手。
+    </p>
+    <div class="hero-stats">
+      <div class="stat-card"><div class="stat-topbar"></div><div class="stat-glow"></div><span class="stat-icon">⚡</span><div class="stat-num grad-text">90%</div><div class="stat-label">人工效率提升</div></div>
+      <div class="stat-card"><div class="stat-topbar"></div><div class="stat-glow"></div><span class="stat-icon">🌐</span><div class="stat-num grad-text">7×24</div><div class="stat-label">全天候自动运行</div></div>
+      <div class="stat-card"><div class="stat-topbar"></div><div class="stat-glow"></div><span class="stat-icon">⏱</span><div class="stat-num grad-text">2min</div><div class="stat-label">单次完整走查耗时</div></div>
+      <div class="stat-card"><div class="stat-topbar"></div><div class="stat-glow"></div><span class="stat-icon">🎯</span><div class="stat-num grad-text">零遗漏</div><div class="stat-label">异常必达必报</div></div>
+    </div>
+    <div class="scroll-down">
+      <span>向下探索</span>
+      <div class="scroll-arrow"></div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- Pain -->
+  <section id="pain">
+    <div class="wrap">
+      <div class="section-header" data-reveal>
+        <div class="eyebrow">⚠ 核心痛点</div>
+        <h2>传统人工走查的 <span class="grad-text">六大困境</span></h2>
+        <p class="section-desc">运营团队每日疲于应对，效率低、易遗漏、难追溯</p>
+      </div>
+      <div class="pain-grid" data-reveal>
+        <div class="pain-card"><div class="pain-bar"></div><div class="pain-num grad-text">01</div><div class="pain-icon">⏰</div><h3>耗时耗力</h3><p>每次走查需人工逐一打开页面对比，一次完整走查平均耗时 20～30 分钟，高峰期任务严重堆积。</p></div>
+        <div class="pain-card"><div class="pain-bar"></div><div class="pain-num grad-text">02</div><div class="pain-icon">🙈</div><h3>容易遗漏</h3><p>资源位数量庞大，人工核查依赖个人细心程度，节假日、大促期间极易出现漏查、错查情况。</p></div>
+        <div class="pain-card"><div class="pain-bar"></div><div class="pain-num grad-text">03</div><div class="pain-icon">📋</div><h3>排期对齐难</h3><p>多业务线资源位排期分散在不同表格，人工汇总比对耗费大量精力，版本对齐常出差错。</p></div>
+        <div class="pain-card"><div class="pain-bar"></div><div class="pain-num grad-text">04</div><div class="pain-icon">📣</div><h3>通知不及时</h3><p>发现异常后需人工逐一找到负责人，沟通链路长，问题从发现到处理往往延误数小时。</p></div>
+        <div class="pain-card"><div class="pain-bar"></div><div class="pain-num grad-text">05</div><div class="pain-icon">📊</div><h3>数据难沉淀</h3><p>走查结果散落在截图、群聊记录中，无法形成系统化历史数据，复盘时缺乏有效支撑。</p></div>
+        <div class="pain-card"><div class="pain-bar"></div><div class="pain-num grad-text">06</div><div class="pain-icon">🌙</div><h3>夜间无人值守</h3><p>凌晨定时上线的资源位无法及时核查，异常往往到第二天上班才被发现，易导致核心资源位的空窗浪费，影响品类的曝光与转化。</p></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- Types -->
+  <section id="types">
+    <div class="wrap">
+      <div class="section-header" data-reveal>
+        <div class="eyebrow">📱 走查范围</div>
+        <h2>覆盖 <span class="grad-text">8 种核心资源位</span></h2>
+        <p class="section-desc">点击卡片可查看详细走查说明</p>
+      </div>
+      <div class="types-grid" id="typesGrid" data-reveal></div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- Compare -->
+  <section id="compare">
+    <div class="wrap">
+      <div class="section-header" data-reveal>
+        <div class="eyebrow">📊 效果对比</div>
+        <h2>引入前后 <span class="grad-text">全方位对比</span></h2>
+        <p class="section-desc">数据说话，效率飞跃</p>
+      </div>
+      <div class="table-shell" data-reveal>
+        <table>
+          <thead>
+            <tr>
+              <th>对比维度</th>
+              <th><span class="cmp-badge before">⬤ 引入前</span></th>
+              <th><span class="cmp-badge after">⬤ 引入后</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="dim">排期解析</td>
+              <td class="before">人工解析排期表，逐条记录每日资源位与品类负责人，约 15 min/周</td>
+              <td class="after">AI 自动解析排期表，秒级生成走查清单并关联负责人</td>
+            </tr>
+            <tr>
+              <td class="dim">走查执行</td>
+              <td class="before">上班后逐一在前台各资源位核对上线情况，多城市需反复切换确认，20～30 min/次</td>
+              <td class="after">全自动脚本批量检测资源位后台配置情况，覆盖全部城市，≈ 2 分钟/次</td>
+            </tr>
+            <tr>
+              <td class="dim">走查时效</td>
+              <td class="before">依赖人工上班后执行，紧急任务易导致走查推迟，漏配资源位造成空窗浪费</td>
+              <td class="after">T-1 日晚 21:00 预检 + T 日 0:00 正式走查，异常即时 @ 品类负责人</td>
+            </tr>
+            <tr>
+              <td class="dim">周末覆盖</td>
+              <td class="before">周末仍需人工走查，占用休息时间</td>
+              <td class="after">7×24 全自动运行，全年无休</td>
+            </tr>
+            <tr>
+              <td class="dim">异常通知</td>
+              <td class="before">发现问题后需手动在群里逐一 @ 对应负责人</td>
+              <td class="after">自动 @ 品类负责人并附上截图与配置详情</td>
+            </tr>
+            <tr>
+              <td class="dim">数据沉淀</td>
+              <td class="before">每周人工梳理汇总并按格式记录 Wiki 文档，约 20 min/周</td>
+              <td class="after">全量结果自动入库存档，支持历史查询与复盘</td>
+            </tr>
+            <tr>
+              <td class="dim">人力成本</td>
+              <td class="before">每日至少 1 名运营专职跟进走查</td>
+              <td class="after">零人力，系统全自动</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- Schedule -->
+  <section id="schedule" class="schedule-band">
+    <div class="wrap">
+      <div class="section-header" data-reveal>
+        <div class="eyebrow">⏰ 定时任务</div>
+        <h2>三大关键节点 <span class="grad-text">全天候守护</span></h2>
+        <p class="section-desc">前夜预检 → 凌晨走查 → 档期汇总，覆盖走查全流程关键节点</p>
+      </div>
+      <div class="schedule-grid" data-reveal>
+        <div class="sched-card">
+          <div class="sched-bottom" style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%)"></div>
+          <div class="sched-time" style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">21:00</div>
+          <div class="sched-label">🌇 前夜预检</div>
+          <p class="sched-desc">T-1 日晚 21:00 根据排期表预检 T 日的资源配置情况。若发现未配置的资源位，自动在群内 @对应品类负责人进行预提醒，确保次日上线前完成配置。</p>
+        </div>
+        <div class="sched-card">
+          <div class="sched-bottom" style="background:linear-gradient(135deg,#4facfe 0%,#00f2fe 100%)"></div>
+          <div class="sched-time" style="background:linear-gradient(135deg,#4facfe 0%,#00f2fe 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">00:00</div>
+          <div class="sched-label">🌙 凌晨走查</div>
+          <p class="sched-desc">T 日 0:00 正式走查全部资源位。配置正常则在群内播报当日资源位清单及对应品类负责人；若仍有未配置项，则在群内 @对应负责人并标记异常。</p>
+        </div>
+        <div class="sched-card">
+          <div class="sched-bottom" style="background:linear-gradient(135deg,#43e97b 0%,#38f9d7 100%)"></div>
+          <div class="sched-time" style="background:linear-gradient(135deg,#43e97b 0%,#38f9d7 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">每周四</div>
+          <div class="sched-label">📊 档期汇总</div>
+          <p class="sched-desc">每周档期结束后（周四），自动汇总本档期所有资源位的配置情况，按格式整理并归档至 Wiki 文档，便于复盘和追溯。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- Flow -->
+  <section id="flow">
+    <div class="flow-wrap">
+      <div class="section-header" data-reveal>
+        <div class="eyebrow">🔄 全流程</div>
+        <h2>走查全流程 <span class="grad-text">10 个关键步骤</span></h2>
+        <p class="section-desc">从排期投喂到历史复盘，端到端自动化闭环</p>
+      </div>
+      <div class="timeline" data-reveal>
+        <div class="timeline-line"></div>
+        <div class="tstep" style="--dot-color:#818cf8"><div class="tstep-left"><div class="tstep-dot">01</div><div class="tstep-time">每周三</div></div><div class="tstep-card"><div class="tstep-bar"></div><div class="tstep-title">排期投喂</div><div class="tstep-desc">每周三投喂下档期资源位排期表（excel/图片/wiki）上传至agent，AI自动识别结构字段</div></div></div>
+        <div class="tstep" style="--dot-color:#a78bfa"><div class="tstep-left"><div class="tstep-dot">02</div><div class="tstep-time">秒级</div></div><div class="tstep-card"><div class="tstep-bar"></div><div class="tstep-title">智能提取</div><div class="tstep-desc">大模型提取资源位名称、档期时间、负责品类等关键字段，结构化输出。</div></div></div>
+        <div class="tstep" style="--dot-color:#c084fc"><div class="tstep-left"><div class="tstep-dot">03</div><div class="tstep-time">自动</div></div><div class="tstep-card"><div class="tstep-bar"></div><div class="tstep-title">负责人匹配</div><div class="tstep-desc">根据资源位归属品类，自动匹配对应品类负责人（A/B/C），无需人工查找通讯录。</div></div></div>
+        <div class="tstep" style="--dot-color:#e879f9"><div class="tstep-left"><div class="tstep-dot">04</div><div class="tstep-time">自动</div></div><div class="tstep-card"><div class="tstep-bar"></div><div class="tstep-title">清单生成</div><div class="tstep-desc">自动生成本档期每天需走查的资源位清单，包含资源位名称、资源帧数、资源时间段、负责品类等完整信息。</div></div></div>
+        <div class="tstep" style="--dot-color:#06b6d4"><div class="tstep-left"><div class="tstep-dot">05</div><div class="tstep-time">自动</div></div><div class="tstep-card"><div class="tstep-bar"></div><div class="tstep-title">清单确认</div><div class="tstep-desc">系统提前推送走查清单至负责人，支持线上确认/补充备注，形成双向确认机制。</div></div></div>
+        <div class="tstep" style="--dot-color:#22d3ee"><div class="tstep-left"><div class="tstep-dot">06</div><div class="tstep-time">21:00/00:00</div></div><div class="tstep-card"><div class="tstep-bar"></div><div class="tstep-title">自动走查</div><div class="tstep-desc">定时任务触发，无头浏览器自动截图，AI 视觉模型与预期排期比对，标记异常。</div></div></div>
+        <div class="tstep" style="--dot-color:#34d399"><div class="tstep-left"><div class="tstep-dot">07</div><div class="tstep-time">自动</div></div><div class="tstep-card"><div class="tstep-bar"></div><div class="tstep-title">结果播报</div><div class="tstep-desc">将本次走查结果汇总成结构化报告，自动发送至对应业务群，包含资源位名称、配置状态等。</div></div></div>
+        <div class="tstep" style="--dot-color:#f87171"><div class="tstep-left"><div class="tstep-dot">08</div><div class="tstep-time">即时</div></div><div class="tstep-card"><div class="tstep-bar"></div><div class="tstep-title">异常督办</div><div class="tstep-desc">有异常资源位时，自动 @ 对应负责人，附带异常说明，要求限时处理。</div></div></div>
+        <div class="tstep" style="--dot-color:#fbbf24"><div class="tstep-left"><div class="tstep-dot">09</div><div class="tstep-time">每周四</div></div><div class="tstep-card"><div class="tstep-bar"></div><div class="tstep-title">自动归档</div><div class="tstep-desc">所有走查记录、截图、处理结果每周四自动入库存档，支持历史查询与数据复盘分析。</div></div></div>
+        <div class="tstep" style="--dot-color:#6366f1"><div class="tstep-left"><div class="tstep-dot">10</div><div class="tstep-time">随时</div></div><div class="tstep-card"><div class="tstep-bar"></div><div class="tstep-title">历史复盘</div><div class="tstep-desc">支持历史查询与数据复盘分析。</div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- Arch -->
+  <section id="arch" class="arch-band">
+    <div class="wrap">
+      <div class="section-header" data-reveal>
+        <div class="eyebrow">🏗 技术架构</div>
+        <h2>四层 <span class="grad-text">技术架构</span></h2>
+        <p class="section-desc">稳定、可扩展的自动化技术体系</p>
+      </div>
+      <div class="arch-list" data-reveal>
+        <div class="arch-layer">
+          <div class="arch-side"><div class="arch-num grad-text">L1</div><div class="arch-layer-name">数据层</div></div>
+          <div class="arch-main"><h3>排期数据接入</h3><p>多源排期数据统一接入，AI 大模型自动解析非结构化排期表格，输出标准化走查任务。</p><div class="tag-row"><span class="tag">Excel 解析</span><span class="tag">飞书多维表</span><span class="tag">AI 字段提取</span><span class="tag">结构化存储</span><span class="tag">负责人映射</span></div></div>
+        </div>
+        <div class="arch-layer">
+          <div class="arch-side"><div class="arch-num grad-text">L2</div><div class="arch-layer-name">调度层</div></div>
+          <div class="arch-main"><h3>定时任务调度</h3><p>基于 Cron 的定时任务系统，支持任务优先级、失败重试与并发控制，确保走查任务准时可靠执行。</p><div class="tag-row"><span class="tag">Cron 定时器</span><span class="tag">任务队列</span><span class="tag">失败重试</span><span class="tag">并发控制</span><span class="tag">优先级调度</span></div></div>
+        </div>
+        <div class="arch-layer">
+          <div class="arch-side"><div class="arch-num grad-text">L3</div><div class="arch-layer-name">核查层</div></div>
+          <div class="arch-main"><h3>后台配置核查引擎</h3><p>通过后台管理接口直接读取资源位配置详情，自动比对排期表与实际配置的一致性，识别配置缺失、时间错位或分类挂载异常。</p><div class="tag-row"><span class="tag">后台接口直连</span><span class="tag">配置详情读取</span><span class="tag">排期自动比对</span><span class="tag">分类挂载核查（如40532）</span><span class="tag">异常自动标记</span></div></div>
+        </div>
+        <div class="arch-layer">
+          <div class="arch-side"><div class="arch-num grad-text">L4</div><div class="arch-layer-name">通知层</div></div>
+          <div class="arch-main"><h3>智能消息推送</h3><p>走查结果自动生成结构化报告，精准推送至业务群，有异常时实时 @ 责任人，支持历史记录全量存档。</p><div class="tag-row"><span class="tag">群消息推送</span><span class="tag">精准 @ 负责人</span><span class="tag">结构化报告</span><span class="tag">异常截图附件</span><span class="tag">历史全量存档</span></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- Demo -->
+  <section id="demo">
+    <div class="wrap">
+      <div class="section-header" data-reveal>
+        <div class="eyebrow">💬 消息示例</div>
+        <h2>实际群消息 <span class="grad-text">模拟展示</span></h2>
+        <p class="section-desc">系统自动发送走查报告，有异常则精准 @ 责任人</p>
+      </div>
+      <div class="demo-grid" data-reveal>
+        <div class="demo-phone-panel">
+          <div class="phone-demo">
+            <div class="phone-status"><span>9:42</span><div class="phone-notch"></div><span>📶🔋</span></div>
+            <div class="phone-chat-head">
+              <div class="chat-avatar">🤖</div>
+              <div><div class="chat-title">资源位走查机器人</div><div class="chat-sub">某生鲜电商 · 运营走查群</div></div>
+            </div>
+            <div class="chat-body">
+              <div class="msg ok">📋 【00:00 走查报告】
+
+✅ 闪屏广告 — 正常
+✅ 首页默认词 — 正常
+✅ 猜你喜欢坑位 — 正常
+✅ 热搜榜 — 正常
+
+📊 共走查 7 个资源位，全部正常
+<span class="msg-time">今天 00:02 · 自动发送</span></div>
+              <div class="msg warn">📋 【00:00 走查报告】
+
+✅ 闪屏广告 — 正常
+✅ 首页默认词 — 正常
+
+⚠️ 搜索热词 — 异常！
+<span class="at">@负责人A</span> 未搜寻到「草莓」配置项，请尽快检查
+
+⚠️ 分类页Banner — 异常！
+<span class="at">@负责人B</span> 未搜寻到「西瓜」配置项，请尽快检查
+
+📊 共 2 处异常，限时 30min 处理
+<span class="msg-time">今天 00:02 · 自动发送</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="demo-side">
+          <div class="info-card">
+            <h3>🕐 定时触发节点</h3>
+            <p class="lead">每日两次自动巡检，全天候守护每一个资源位</p>
+            <div class="node-list">
+              <div class="node-item">
+                <div class="node-time grad-text">21:00</div>
+                <div><div class="node-label">🌇 前夜预检</div><div class="node-desc">提前检查次日即将生效的资源位配置，发现问题提前预警，避免凌晨空窗</div></div>
+              </div>
+              <div class="node-item">
+                <div class="node-time grad-text">00:00</div>
+                <div><div class="node-label">🌙 凌晨走查</div><div class="node-desc">正式走查全部资源位，配置正常播报清单，异常即时 @ 负责人</div></div>
+              </div>
+            </div>
+          </div>
+          <div class="info-card" style="flex:1">
+            <h3>✅ 消息机制亮点</h3>
+            <ul class="points">
+              <li>异常时精准 @ 对应资源位负责人，不打扰无关人员</li>
+              <li>消息附带截图对比图，直观展示异常位置</li>
+              <li>统计本次走查总数、正常数、异常数</li>
+              <li>全部消息记录自动存档，支持历史回溯</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- Result -->
+  <section id="result">
+    <div class="wrap">
+      <div class="section-header" data-reveal>
+        <div class="eyebrow">📈 项目成果</div>
+        <h2>上线后真实数据 <span class="grad-text">成果显著</span></h2>
+        <p class="section-desc">某生鲜业务运营团队，2026年Q2上线后实测数据</p>
+      </div>
+      <div class="result-grid" data-reveal>
+        <div class="result-card"><div class="result-top" style="background:linear-gradient(135deg,#6366f1,#8b5cf6)"></div><div class="result-glow" style="background:linear-gradient(135deg,#6366f1,#8b5cf6)"></div><div class="result-icon">⚡</div><div class="result-num" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">92%</div><div class="result-label">走查效率提升</div><div class="result-desc">从 30min+ 人工走查到 2min 自动完成</div></div>
+        <div class="result-card"><div class="result-top" style="background:linear-gradient(135deg,#06b6d4,#3b82f6)"></div><div class="result-glow" style="background:linear-gradient(135deg,#06b6d4,#3b82f6)"></div><div class="result-icon">🎯</div><div class="result-num" style="background:linear-gradient(135deg,#06b6d4,#3b82f6);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">99.5%</div><div class="result-label">异常检出率</div><div class="result-desc">AI 视觉比对 + 多城市交叉验证</div></div>
+        <div class="result-card"><div class="result-top" style="background:linear-gradient(135deg,#10b981,#06b6d4)"></div><div class="result-glow" style="background:linear-gradient(135deg,#10b981,#06b6d4)"></div><div class="result-icon">💰</div><div class="result-num" style="background:linear-gradient(135deg,#10b981,#06b6d4);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">0</div><div class="result-label">人力成本</div><div class="result-desc">7×24 全自动运行，无需人工值守</div></div>
+        <div class="result-card"><div class="result-top" style="background:linear-gradient(135deg,#f59e0b,#ef4444)"></div><div class="result-glow" style="background:linear-gradient(135deg,#f59e0b,#ef4444)"></div><div class="result-icon">📊</div><div class="result-num" style="background:linear-gradient(135deg,#f59e0b,#ef4444);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">100%</div><div class="result-label">可追溯覆盖</div><div class="result-desc">全部记录自动入库存档，支持历史查询</div></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+</main>
+
+<footer>
+  <p class="footer-title grad-text">资源位走查 AI 自动化实践 · 某生鲜业务运营团队 · Powered by AI Agent</p>
+  <p>本 Demo 仅供内部技术分享，所有人名、公司、数据均已脱敏</p>
+</footer>
+
+<!-- Lightbox -->
+<div class="lightbox" id="lightbox" hidden>
+  <div class="lb-body" id="lbBody">
+    <button class="lb-close" id="lbClose" aria-label="关闭">✕</button>
+    <button class="lb-nav lb-prev" id="lbPrev" aria-label="上一个">‹</button>
+    <button class="lb-nav lb-next" id="lbNext" aria-label="下一个">›</button>
+    <div class="lb-count" id="lbCount"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var TYPES = [
+    { type: '启动页', name: '闪屏', img: 'assets/splash.jpg', desc: 'App 启动时全屏展示，曝光量最大，活动首选位。需核查创意、跳转链接、倒计时是否正常。', tags: ['启动必检', '全屏', '高曝光'], status: 'ok' },
+    { type: '弹窗插屏', name: '活动弹窗', img: 'assets/modal.jpg', desc: '进入页面触发的插屏弹窗，需核查触发时机、展示创意、按钮跳转链接以及关闭按钮逻辑。', tags: ['弹窗', '插屏', '交互核查'], status: 'ok' },
+    { type: '首页搜索', name: '首页默认词', img: 'assets/home-default.png', desc: '首页搜索框占位提示词，用于引导用户点击搜索特定商品或活动，是低成本高效果的流量引导工具。', tags: ['搜索引导', '首页', '文本核查'], status: 'ok' },
+    { type: '信息流', name: '猜你喜欢坑位', img: 'assets/guess.png', desc: '首页推荐信息流中的广告坑位，需核查内容合规性、创意是否与排期一致，以及坑位位置。', tags: ['信息流', '广告坑位', '合规核查'], status: 'ok' },
+    { type: '搜索页', name: '搜索热词', img: 'assets/hotwords.png', desc: '搜索页展示的热门关键词标签，活动期间需定向配置引流词，核查词条内容、顺序和样式。', tags: ['热词配置', '搜索页', '活动引流'], status: 'warn' },
+    { type: '实时榜单', name: '热搜榜', img: 'assets/hotsearch.png', desc: '搜索页热搜榜单，活动词需按排期准时进榜，需核查活动词是否上榜、排名是否符合预期。', tags: ['排行榜', '实时更新', '排名核查'], status: 'ok' },
+    { type: '分类搜索', name: '分类页默认词', img: 'assets/category-default.png', desc: '分类页搜索框占位提示词，各品类独立配置，用于引导用户在分类页内搜索特定商品或活动。', tags: ['分类页', '默认词', '品类独立'], status: 'ok' },
+    { type: '分类页', name: '分类页 Banner', img: 'assets/category-banner.png', desc: '各分类页顶部横幅图片，承载品类专属活动。需核查图片创意是否正确上线、跳转链接是否有效。', tags: ['Banner', '分类页', '跳转核查'], status: 'warn' }
+  ];
+
+  /* Render 8 resource cards with screenshot placeholders */
+  function renderTypes() {
+    var grid = document.getElementById('typesGrid');
+    grid.innerHTML = TYPES.map(function (item, i) {
+      return (
+        '<div class="shot-card" role="button" tabindex="0" data-index="' + i + '" aria-label="查看' + item.name + '详情">' +
+          '<div class="phone">' +
+            '<div class="shot-placeholder"><img src="' + item.img + '" alt="' + item.name + '" style="width:100%;height:auto;object-fit:contain;border-radius:12px;display:block"></div>' +
+            '<div class="shot-hover"><div class="zoom-badge">🔍</div></div>' +
+          '</div>' +
+          '<div class="shot-info">' +
+            '<div class="shot-name">' + item.name + '</div>' +
+            '<div class="shot-desc">' + item.desc + '</div>' +
+            '<div class="tag-row">' + item.tags.map(function (t) { return '<span class="tag">' + t + '</span>'; }).join('') + '</div>' +
+          '</div>' +
+        '</div>'
+      );
+    }).join('');
+    grid.querySelectorAll('.shot-card').forEach(function (card) {
+      var open = function () { openLightbox(Number(card.dataset.index)); };
+      card.addEventListener('click', open);
+      card.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+      });
+    });
+  }
+
+  function placeholderHtml(item, large) {
+    return (
+      '<div class="shot-placeholder' + (large ? '' : '') + '">' +
+        '<div class="ph-icon">🖼</div>' +
+        '<div class="ph-name">' + item.name + '</div>' +
+        '<div class="ph-tip">截图待补充</div>' +
+      '</div>'
+    );
+  }
+
+  var lightbox = document.getElementById('lightbox');
+  var lbBody = document.getElementById('lbBody');
+  var lbCount = document.getElementById('lbCount');
+  var current = 0;
+
+  function openLightbox(index) {
+    current = index;
+    var item = TYPES[index];
+    lbBody.innerHTML =
+      '<div class="lb-phone">' +
+      '<div class="phone"><img src="' + item.img + '" alt="' + item.name + '" style="width:100%;height:auto;object-fit:contain;border-radius:12px;display:block"></div>' +
+      '</div>' +
+      '<div class="lb-info">' +
+        '<div class="lb-type">' + item.type + '</div>' +
+        '<div class="lb-name">' + item.name + '</div>' +
+        '<div class="lb-desc">' + item.desc + '</div>' +
+        '<div class="tag-row">' + item.tags.map(function (t) { return '<span class="tag lg">' + t + '</span>'; }).join('') + '</div>' +
+      '</div>' +
+      '<button class="lb-close" id="lbClose" aria-label="关闭">✕</button>' +
+      '<button class="lb-nav lb-prev" id="lbPrev" aria-label="上一个">‹</button>' +
+      '<button class="lb-nav lb-next" id="lbNext" aria-label="下一个">›</button>' +
+      '<div class="lb-count">' + (index + 1) + ' / ' + TYPES.length + '</div>';
+    lbCount = document.getElementById('lbCount');
+    document.getElementById('lbClose').addEventListener('click', closeLightbox);
+    document.getElementById('lbPrev').addEventListener('click', function (e) { e.stopPropagation(); stepLightbox(-1); });
+    document.getElementById('lbNext').addEventListener('click', function (e) { e.stopPropagation(); stepLightbox(1); });
+    lightbox.hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeLightbox() {
+    lightbox.hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  function stepLightbox(dir) {
+    openLightbox((current + dir + TYPES.length) % TYPES.length);
+  }
+
+  lightbox.addEventListener('click', closeLightbox);
+  lbBody.addEventListener('click', function (e) { e.stopPropagation(); });
+  document.addEventListener('keydown', function (e) {
+    if (lightbox.hidden) return;
+    if (e.key === 'Escape') closeLightbox();
+    if (e.key === 'ArrowLeft') stepLightbox(-1);
+    if (e.key === 'ArrowRight') stepLightbox(1);
+  });
+
+  /* Particle canvas */
+  function initParticles() {
+    var canvas = document.getElementById('particles');
+    var ctx = canvas.getContext('2d');
+    var particles = [];
+    var animId;
+
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    function Particle() {
+      this.reset();
+    }
+    Particle.prototype.reset = function () {
+      this.x = Math.random() * canvas.width;
+      this.y = canvas.height + 20;
+      this.r = Math.random() * 2 + 0.5;
+      this.speedY = -(Math.random() * 0.6 + 0.2);
+      this.speedX = (Math.random() - 0.5) * 0.3;
+      this.alpha = Math.random() * 0.4 + 0.1;
+      this.color = Math.random() > 0.5 ? '#6366f1' : '#06b6d4';
+    };
+    Particle.prototype.update = function () {
+      this.y += this.speedY;
+      this.x += this.speedX;
+      if (this.y < -20) this.reset();
+    };
+    Particle.prototype.draw = function () {
+      ctx.save();
+      ctx.globalAlpha = this.alpha;
+      ctx.fillStyle = this.color;
+      ctx.shadowBlur = 6;
+      ctx.shadowColor = this.color;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    };
+
+    for (var i = 0; i < 60; i++) {
+      var p = new Particle();
+      p.y = Math.random() * canvas.height;
+      particles.push(p);
+    }
+
+    function animate() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      particles.forEach(function (p) { p.update(); p.draw(); });
+      animId = requestAnimationFrame(animate);
+    }
+    animate();
+    window.addEventListener('beforeunload', function () { cancelAnimationFrame(animId); });
+  }
+
+  /* Navbar scroll state */
+  function initNavbar() {
+    var nav = document.getElementById('navbar');
+    function onScroll() {
+      nav.classList.toggle('scrolled', window.scrollY > 40);
+    }
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+  }
+
+  /* Smooth scroll for nav links */
+  function initSmoothScroll() {
+    document.querySelectorAll('[data-smooth]').forEach(function (a) {
+      a.addEventListener('click', function (e) {
+        var href = a.getAttribute('href');
+        if (!href || href === '#') return;
+        var el = document.getElementById(href.slice(1));
+        if (el) {
+          e.preventDefault();
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    });
+  }
+
+  /* Reveal on scroll */
+  function initReveal() {
+    var els = document.querySelectorAll('[data-reveal]');
+    if (!('IntersectionObserver' in window)) {
+      els.forEach(function (el) { el.classList.add('is-visible'); });
+      return;
+    }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          io.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.1 });
+    els.forEach(function (el) { io.observe(el); });
+  }
+
+  renderTypes();
+  initParticles();
+  initNavbar();
+  initSmoothScroll();
+  initReveal();
+})();
+</script>
+</body>
+</html>
